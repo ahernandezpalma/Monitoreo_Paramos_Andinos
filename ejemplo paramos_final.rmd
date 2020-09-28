@@ -1,0 +1,190 @@
+---
+title: Manejo y procesamiento de datos de monitoreo a la restauración ecológica
+  en páramos
+author: "Angélica Hernández-Palma"
+date: "Septiembre 28, 2020"
+output:
+  html_document: default
+  pdf_document: default
+  word_document:
+    fig_height: 3.5
+    fig_width: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Este código de programación en R está escrito con el objetivo de ilustrar el proceso de verificación, manejo, y análisis de datos recolectados durante el proceso de monitoreo de un proyecto de restauración ecológica de páramos andinos. Este código utiliza una base de datos como ejemplo para ilustrar el proceso descrito anteriormente. La base de datos está disponible en el cuerpo de este código.
+
+### Instalación de paquetes
+En primer lugar se deben instalar los paquetes con los cuales vamos a trabajar este ejemplo. Los paquetes requeridos para este ejemplo son: 
+
+* vegan
+* tidyr
+* reshape
+* ggplot2
+* Rmisc
+* RCurl
+
+Los paquetes se instalan en el computador una primera y única vez, utilizando el comando:
+
+install.packages(" ")
+
+Entre las comillas se escribe el nombre del paquete a instalar. En el caso del primer paquete requerido, la forma de instalarlo es así:
+
+install.packages("vegan")
+
+Es necesario que el usuario instale los 6 paquetes mencionados anteriormente con el fin de utilizar este código sin problemas.  
+
+### Cargar paquetes a la sesión
+Una vez hayan instalado los paquetes requeridos, estos se deben cargar a la sesión de trabajo. Este procedimiento se realiza cada vez que se inicie una sesión en RStudio. Dentro de estos paquetes están las funciones que se utilizan en este código ejemplo. Si estos paquetes no están cargados a la sesión en el momento de trabajar, el código no funcionará correctarmente, el programa arrojará mensajes de error, y el ejemplo no funcionará. 
+
+```{r message=FALSE}
+library(vegan)
+library(tidyr)
+library(reshape)
+library(ggplot2)
+library(Rmisc)
+library(RCurl)
+```
+
+### Cargar la base de datos
+La base de datos a usar como ejemplo en este código se encuentra en GitHub, para cargarla a la sesión es necesario correr las siguientes líneas:
+
+```{r}
+x <- getURL("https://raw.githubusercontent.com/ahernandezpalma/Monitoreo_Paramos_Andinos/master/monitoreo_final.csv")
+datos <- read.csv(text = x)
+```
+
+### Estructura de los datos y cambiar tipos de variables
+Ahora debemos ver la estructura de los datos y de cada variable (columna):
+
+```{r}
+str(datos)
+```
+
+Cada línea de código (##) muestra una variable (columna) diferente, así como el tipo de variable (chr= caracter/texto, int= número entero, num= numérico, Factor= categórico).
+
+Algunas veces es necesario cambiar el tipo de variable para obtener los resultados deseados. En nuestro caso por ejemplo, el transecto se guardó como un número entero, ya que son números enteros del 1 al 5. Sin embargo, para razones de análisis de los datos necesitamos que esta variable sea categórica. Estos cambios de tipos de variables se pueden hacer de la siguiente manera:
+
+
+```{r}
+datos$implementacion = as.factor(datos$implementacion) #Año de implementación. Se debe cambiar de número entero a factor
+datos$transecto = as.factor(datos$transecto) #Transecto. Se debe cambiar de número entero a factor
+datos$subparcela = as.factor(datos$subparcela) #Subparcela. Se debe cambiar de número entero a factor
+datos$familia = as.factor(datos$familia) #Familia. Se debe cambiar de caracter/texto a factor
+datos$genero = as.factor(datos$genero) #Género. Se debe cambiar de caracter/texto a factor
+datos$especie = as.factor(datos$especie) #Especie. Se debe cambiar de caracter/texto a factor
+```
+
+### Resumen y exploración de los datos
+Podemos ver un resumen de cada variable de la base datos:
+
+```{r}
+summary(datos)
+```
+
+o de sólo una variable (por ejemplo especie) para ver cómo se distribuyen los valores (frecuencias):
+
+```{r}
+summary(datos$especie)
+```
+
+
+### Histogramas de variables numéricas
+
+También podemos buscar valores atípicos (outliers) y otros errores en los datos numéricos:
+
+```{r}
+hist(datos$dap) #Histograma para variable DAP (diámetro a la altura del pecho)
+hist(datos$altura) #Histograma para variable altura
+hist(datos$cob_total) #Histograma para variable cobertura
+```
+
+### Análisis de diversidad (a nivel de transecto)
+Para este análisis, se debe crear una matriz especial (llamada en este caso "especies2"") para trabajar con la función "diversity" del paquete vegan. Esta matriz especial sólo debe contener las especies como columnas y los sitios como filas. El cuerpo de la matriz son las abundancias de las especies en cada sitio de muestreo (transecto). No puede haber espacios en blanco y los nombres o códigos de los sitios de muestreo deben ir como nombres de filas y no como una columna adicional. 
+
+```{r}
+especies <- as.data.frame(table(datos$especie, datos$transecto)) #Se crea una tabla de frecuencias
+especies2 <- spread(especies, Var1, Freq) #La tabla se cambia de formato para lograr la matriz
+transectos <- (especies2$Var2) #La variable "Var2" corresponde a los transectos
+row.names(especies2)<- transectos #Se crean los nombres de las filas 
+especies2$Var2 <- NULL #Se elimina la variable "Var2" para organizar la matriz en el formato requerido
+```
+
+Se debe crear una tabla para almacenar los resultados del análisis de diversidad: índices de diversidad de Shannon y Simpson, así como número de especies (riqueza) e individuos (abundancia) de cada transecto:
+
+```{r}
+indices<- as.data.frame(transectos) #Crea la tabla con los nombres de los transectos en la primera columna
+indices$shannon <- diversity(especies2) #Calcula el índice de Shannon
+indices$simpson <- diversity(especies2, index = "simpson") #Calcula el índice de Simpson
+indices$riqueza <- specnumber(especies2) #Calcula el número de especies
+indices$abundancia <- rowSums(especies2) #Calcula el número de individuos
+
+print(indices)
+```
+
+Los resultados de estos análisis de diversidad se pueden mostrar de forma gráfica de la siguiente manera:
+
+```{r}
+ggplot(indices, aes(x=transectos, y=abundancia)) +
+geom_point()
+
+ggplot(indices, aes(x=transectos, y=riqueza)) +
+geom_point()
+
+ggplot(indices, aes(x=transectos, y=shannon)) +
+geom_point()
+
+ggplot(indices, aes(x=transectos, y=simpson)) +
+geom_point()
+```
+
+### Análisis de estructura vegetal (a nivel de transecto)
+Los análisis de los datos de estructura vegetal recopilados mediante el monitoreo a las acciones de restauración, se pueden realizar de la siguiente manera:
+
+```{r}
+estructura <- datos[c(12,17,18,19,20,23)] #Seleccionar las variables de estructura vegetal 
+estructura2 <- melt(estructura, id=c("transecto","especie")) #Cambiar de formato ancho a formato largo
+
+transecto <- cast(estructura2, transecto ~ variable, mean) #Calcular el promedio por cada cobertura
+print(transecto)
+
+especie <- cast(estructura2, especie ~ variable, mean) #Calcular promedio por cada especie
+print(especie)
+```
+```{r message=FALSE}
+cob_total<- summarySE(datos, measurevar="cob_total", groupvars=c("transecto", "especie"), 
+                      na.rm=T, conf.interval= 0.95) #La información de una sola variable                                                      de estructura se puede resumir según                                                      varios criterios (groupvars)
+```
+
+### Convertir variables de fecha al formato adecuado
+Si se requiere trabajar con fechas en algún análisis específico, es necesario convertir la variable a un formato de fecha específico. En nuestro ejemplo, la columna fecha está guardada como una variable categórica (factor). 
+
+```{r}
+class(datos$fecha)
+```
+
+Para convertir la variable en una variable adecuada, se puede utilizar la función "as.Date" como en el siguiente ejemplo:
+
+```{r}
+datos$fecha_nueva <- as.Date(datos$fecha, format = "%d/%m/%Y")
+class(datos$fecha_nueva)   #Ahora está guardada como una variable de fecha
+```
+
+### Recuadro 1
+
+```{r}
+#Ejemplo para cambiar de formato ancho a largo
+datos2<-datos[c(14,17,18,19,20,23)] #Seleccionar variables a utilizar 
+datos3 <- melt(datos2, id=c("cobertura","especie")) #Cambio de formato ancho a formato largo
+
+#Promedio de variables de estructura por cobertura
+cob_avg <- cast(datos3, cobertura~variable, mean)
+print(cob_avg)
+
+#Promedio por especie
+spp_avg <- cast(datos3, especie~variable, mean)
+print(spp_avg)
+```
